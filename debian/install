@@ -1,0 +1,5 @@
+asset /opt/aenux/
+runner /opt/aenux/
+run.sh /opt/aenux/
+run_qt6.py /opt/aenux/
+winetricks /opt/aenux/

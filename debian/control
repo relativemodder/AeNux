@@ -1,0 +1,12 @@
+Source: aenux
+Section: misc
+Priority: optional
+Maintainer: Your Name <your.email@example.com>
+Build-Depends: debhelper (>= 9), dh-virtualenv
+Standards-Version: 3.9.5
+
+Package: aenux
+Architecture: any
+Depends: ${misc:Depends}, ${python:Depends}, wget, unzip, cabextract, zenity, xdg-utils, python3-pyqt6
+Description: AeNux - Run Adobe After Effects on Linux
+ AeNux is a sophisticated Linux solution that enables seamless execution of Adobe After Effects through Wine and Winetricks.

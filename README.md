@@ -77,6 +77,15 @@ Run "Install Plugin on the gui"
 2. Click **"Uninstall"** in the top-right corner
 3. Delete the cloned repository directory
 
+### Building from Source
+
+To build the `.deb` package from source, you will need `dpkg-dev` and `dh-virtualenv`.
+
+```bash
+sudo apt-get install dpkg-dev dh-virtualenv
+dpkg-buildpackage -us -uc
+```
+
 ---
 
 ## 📋 Important Notes
@@ -107,7 +116,7 @@ https://forum.mattkc.com/viewtopic.php?t=337
 - [❓] Enable hardware acceleration support
 *Only for NVIDIA, by patching nvidia-libs. [Read this issue for more information](https://github.com/cutefishaep/AeNux/issues/5).*
 - [❌] Streamline additional plugin installation
-- [❌] Package as .deb file for easier distribution
+- [✅] Package as .deb file for easier distribution
 - [❌] Implement "Open With AeNux" context menu integration
 
 ---
