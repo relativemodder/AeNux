@@ -1,4 +1,4 @@
 #!/bin/bash
 
-# Aktifkan virtual environment dan jalankan skrip Python
-python run_qt6.py
+uv sync
+uv run python src/main.py
