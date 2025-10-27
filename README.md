@@ -44,11 +44,45 @@
 
 ### Quick Installation
 
+You need to install native packages, like this:
+
+## Arch Linux / Manjaro / EndeavourOS / etc.
+```bash
+sudo pacman -S --noconfirm wget unzip cabextract zenity xdg-utils desktop-file-utils
+```
+
+## Debian / Ubuntu / Linux Mint / Pop!_OS / etc.
+```bash
+sudo apt update && sudo apt install -y wget unzip cabextract zenity xdg-utils desktop-file-utils
+```
+
+## Fedora / RHEL / CentOS / AlmaLinux / Rocky Linux / etc. (using dnf)
+```bash
+sudo dnf install -y wget unzip cabextract zenity xdg-utils desktop-file-utils
+```
+
+## openSUSE (Leap / Tumbleweed)
+```bash
+sudo zypper install -y wget unzip cabextract zenity xdg-utils desktop-file-utils
+```
+
+**If you want to manage python using `uv`, install it using this:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
 1. **Clone and Initialize**
    ```bash
    git clone https://github.com/cutefishaep/AeNux
    cd AeNux
-   chmod +X run.sh
+   ```
+   **If you want to use native python packages**
+   ```bash
+   ./run_native.sh
+   ```
+
+   **If you want to use `uv`**
+   ```bash
    ./run.sh
    ```
    *Ensure you're within the cloned repository directory*

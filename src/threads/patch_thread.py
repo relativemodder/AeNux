@@ -37,8 +37,15 @@ class PatchThread(QThread):
             return True
         # Check for NVIDIA libraries
         try:
-            result = subprocess.run(['lspci'], capture_output=True, text=True)
-            if 'NVIDIA' in result.stdout.upper():
+            # Use Popen to check lspci output without blocking
+            process = subprocess.Popen(
+                ['lspci'], 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=False
+            )
+            stdout, _ = process.communicate()
+            if 'NVIDIA' in stdout.decode('utf-8', errors='ignore').upper():
                 return True
         except:
             pass
@@ -46,6 +53,51 @@ class PatchThread(QThread):
 
     def _handle_nvidia_finished(self, success):
         self._nvidia_success = success
+
+    def _run_and_stream_output(self, cmd_list, env, prefix):
+        """
+        Helper method to execute a command, stream its stdout/stderr 
+        to the log_signal, and return the final returncode.
+        """
+        self.log_signal.emit(f"[EXEC] {' '.join(cmd_list)}")
+        
+        try:
+            process = subprocess.Popen(
+                cmd_list,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False, # Read as bytes
+                bufsize=1  # Line buffering
+            )
+
+            # Stream stdout line by line
+            for line in iter(process.stdout.readline, b''):
+                decoded_line = line.decode('utf-8', errors='replace').rstrip()
+                if decoded_line:
+                    self.log_signal.emit(f"[{prefix}] {decoded_line}")
+                
+                # Check for cancellation inside the loop
+                if self._is_cancelled:
+                    process.terminate()
+                    return -1 
+
+            # Wait for the process to finish
+            process.wait()
+            return_code = process.returncode
+            
+            # Read stderr after the process has finished
+            stderr_output = process.stderr.read()
+            if stderr_output:
+                for line in stderr_output.decode('utf-8', errors='replace').splitlines():
+                     self.log_signal.emit(f"[{prefix} STDERR] {line}")
+            
+            return return_code
+            
+        except Exception as e:
+            self.log_signal.emit(f"[EXEC ERROR] Command failed: {e}")
+            return -2 # Custom error code for execution failure
+
 
     def run(self):
         try:
@@ -88,10 +140,16 @@ class PatchThread(QThread):
                 self.log_signal.emit("[WARNING] Wineprefix already exists. It will be used as-is.")
             else:
                 self.log_signal.emit("[DEBUG] Initializing wineprefix...")
-                result = subprocess.run([wine_path, "boot"], env=env, capture_output=True, text=True)
-                if result.returncode != 0:
-                    self.log_signal.emit(f"[ERROR] Wine initialization failed. Stderr: {result.stderr}")
+                
+                # Streamed wine boot
+                return_code = self._run_and_stream_output([wine_path, "boot"], env, "WINE INIT")
+                
+                if return_code != 0:
+                    self.log_signal.emit(f"[ERROR] Wine initialization failed. Return code: {return_code}")
                     self.finished_signal.emit(False)
+                    return
+                if return_code == -1: # Check for cancellation
+                    self.cancelled.emit()
                     return
                 self.log_signal.emit("[DEBUG] Wineprefix initialized.")
 
@@ -103,17 +161,18 @@ class PatchThread(QThread):
 
             self.log_signal.emit("[DEBUG] Configuring registry and visual settings...")
             
+            # Fast subprocess.run calls (no streaming needed)
             subprocess.run([wine_path, "reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager", 
-                          "/v", "ThemeActive", "/t", "REG_SZ", "/d", "0", "/f"], env=env)
+                          "/v", "ThemeActive", "/t", "REG_SZ", "/d", "0", "/f"], env=env, check=False)
             
             reg_file = os.path.join(BASE_DIR, "aenux-colors.reg")
             with open(reg_file, 'w') as f:
                 f.write(AENUX_COLORS_REG_CONTENT)
             
-            subprocess.run([wine_path, "regedit", reg_file], env=env)
+            subprocess.run([wine_path, "regedit", reg_file], env=env, check=False)
             os.remove(reg_file)
             
-            subprocess.run([wineserver_path, "-k"], env=env)
+            subprocess.run([wineserver_path, "-k"], env=env, check=False)
             
             self.progress_signal.emit(50)
 
@@ -125,20 +184,16 @@ class PatchThread(QThread):
             self.log_signal.emit("[DEBUG] Running winetricks...")
             winetricks_cmd = [WINETRICKS_PATH, "-q", "dxvk", "corefonts", "gdiplus", "fontsmooth=rgb"]
             
-            # Use subprocess.run to capture the output
-            result = subprocess.run(winetricks_cmd, env=env, capture_output=True, text=True)
+            # Streamed winetricks
+            winetricks_return_code = self._run_and_stream_output(winetricks_cmd, env, "WINETRICKS")
             
-            # Log stdout and stderr line-by-line
-            if result.stdout:
-                for line in result.stdout.splitlines():
-                    self.log_signal.emit(f"[WINETRICKS] {line}")
-            if result.stderr:
-                for line in result.stderr.splitlines():
-                    self.log_signal.emit(f"[WINETRICKS STDERR] {line}")
-            
+            if winetricks_return_code == -1: # Check for cancellation
+                self.cancelled.emit()
+                return
+
             # Check for winetricks failure
-            if result.returncode != 0:
-                self.log_signal.emit(f"[ERROR] Winetricks failed with return code {result.returncode}. Critical dependencies are missing.")
+            if winetricks_return_code != 0:
+                self.log_signal.emit(f"[ERROR] Winetricks failed with return code {winetricks_return_code}. Critical dependencies are missing.")
                 self.finished_signal.emit(False)
                 return
 
@@ -152,18 +207,15 @@ class PatchThread(QThread):
             if os.path.exists(vcr_bat):
                 self.log_signal.emit("[DEBUG] Installing VCR dependencies...")
                 
-                vcr_result = subprocess.run([wine_path, vcr_bat], env=env, capture_output=True, text=True)
-
-                # Log the VCR installer output
-                if vcr_result.stdout:
-                    for line in vcr_result.stdout.splitlines():
-                        self.log_signal.emit(f"[VCR INSTALL] {line}")
-                if vcr_result.stderr:
-                    for line in vcr_result.stderr.splitlines():
-                        self.log_signal.emit(f"[VCR STDERR] {line}")
+                # Streamed VCR installer
+                vcr_return_code = self._run_and_stream_output([wine_path, vcr_bat], env, "VCR INSTALL")
                         
-                if vcr_result.returncode != 0:
-                    self.log_signal.emit(f"[WARNING] VCR installation failed (code {vcr_result.returncode}). Proceeding anyway.")
+                if vcr_return_code == -1: # Check for cancellation
+                    self.cancelled.emit()
+                    return
+                        
+                if vcr_return_code != 0:
+                    self.log_signal.emit(f"[WARNING] VCR installation failed (code {vcr_return_code}). Proceeding anyway.")
                 else:
                     self.log_signal.emit("[DEBUG] VCR installation finished.")
 
@@ -178,6 +230,7 @@ class PatchThread(QThread):
 
             self.log_signal.emit("[DEBUG] Creating shortcuts to Linux folders...")
             wine_drive_c = os.path.join(self.wineprefix_path, "drive_c")
+            # Use glob to find the user's Favorites directory (e.g., /users/aenux/Favorites)
             fav_dir = os.path.join(wine_drive_c, "users", "*", "Favorites") 
             
             fav_paths = glob.glob(fav_dir)
@@ -189,9 +242,8 @@ class PatchThread(QThread):
                 
                 for folder in folders_to_link:
                     link_path = os.path.join(target_fav_dir, folder)
-                    # Use os.path.islink and os.path.exists for safer removal
+                    # Clean up existing links/files
                     if os.path.islink(link_path) or os.path.exists(link_path):
-                         # If it's a symlink, os.remove is correct. If it's a directory (unlikely but safe), os.rmdir would be needed, but we expect a link.
                         try:
                             os.remove(link_path)
                         except OSError as e:
@@ -208,7 +260,7 @@ class PatchThread(QThread):
                     os.remove(link_path_aenux)
                 os.symlink(AE_NUX_DIR, os.path.join(target_fav_dir, "AeNux"))
                 
-                subprocess.run([wineserver_path, "-k"], env=env)
+                subprocess.run([wineserver_path, "-k"], env=env, check=False)
             else:
                 self.log_signal.emit("[WARNING] Favorites directory not found, skipping shortcuts...")
 
@@ -228,7 +280,7 @@ class PatchThread(QThread):
                 shutil.copy2(msxml3_src, os.path.join(system32_dir, "msxml3r.dll"))
                 
                 subprocess.run([wine_path, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides", 
-                              "/v", "msxml3", "/d", "native,builtin", "/f"], env=env)
+                              "/v", "msxml3", "/d", "native,builtin", "/f"], env=env, check=False)
             else:
                 self.log_signal.emit("[WARNING] msxml3.dll not found or System32 not available, skipping DLL override...")
             

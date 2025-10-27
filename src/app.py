@@ -1,5 +1,3 @@
-# app.py
-
 import os
 import subprocess
 import json
@@ -31,7 +29,9 @@ class AeNuxApp(QWidget):
         self.plugin_thread = None
         
         self.buttons_disabled = False
-        self.button_cooldown_timer = QTimer()
+        
+        # Cooldown timer is kept only for quick, single-action buttons (like Kill)
+        self.button_cooldown_timer = QTimer() 
         self.button_cooldown_timer.setSingleShot(True)
         self.button_cooldown_timer.timeout.connect(self._enable_buttons)
         
@@ -160,8 +160,8 @@ class AeNuxApp(QWidget):
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(footer)
 
-    def _disable_buttons_temporarily(self, duration=1500):
-        """Temporarily disable all main buttons"""
+    def _disable_buttons_persistent(self):
+        """Persistently disable all main buttons until a thread finishes/enables them."""
         if self.buttons_disabled:
             return
             
@@ -170,18 +170,34 @@ class AeNuxApp(QWidget):
             button.setEnabled(False)
         
         self.runner_dropdown.setEnabled(False)
-        
+
+    def _disable_buttons_cooldown(self, duration=1500):
+        """Temporarily disable buttons using the cooldown timer for quick actions."""
+        if self.buttons_disabled:
+            return
+            
+        self._disable_buttons_persistent()
         self.button_cooldown_timer.start(duration)
 
     def _enable_buttons(self):
-        """Re-enable all buttons"""
+        """Re-enable all buttons and reset the disabled flag."""
+        if not self.buttons_disabled:
+            return 
+            
         self.buttons_disabled = False
-        for button in self.main_buttons:
-            button.setEnabled(True)
-        
-        self.runner_dropdown.setEnabled(True)
+        self._check_installation_status() 
         self._check_runner_support()
-        self._check_installation_status()
+        self.runner_dropdown.setEnabled(True)
+
+    def _update_progress(self, value):
+        """Update progress bar and manage button state based on progress."""
+        self.progress_bar.setValue(value)
+        
+        if value > 0 and value < 100:
+            self._disable_buttons_persistent()
+            
+        if value == 100:
+            self._enable_buttons()
 
     def _check_installation_status(self):
         """Check if AeNux is installed and update UI accordingly"""
@@ -198,16 +214,28 @@ class AeNuxApp(QWidget):
             self.status_label.setText("AeNux installed")
             self.install_button.hide()
             self.uninstall_button.show()
-            self.btn_install_plugin.setEnabled(not self._is_proton_runner())
+            self.btn_install_plugin.setEnabled(not self._is_proton_runner() and not self.buttons_disabled)
+            
+            # Check if buttons are currently disabled by an operation
+            if not self.buttons_disabled:
+                self.uninstall_button.setEnabled(True)
+                
             self.logs_box.append("[STATUS] AeNux is installed and ready to use.")
 
             if os.path.exists(PATCHED_FILE_FLAG):
                 self.btn_run.setText('Run AfterFX')
+            else:
+                self.btn_run.setText('Patch first and run AfterFX')
         else:
             self.status_label.setText("AeNux is not installed")
             self.install_button.show()
             self.uninstall_button.hide()
             self.btn_install_plugin.setEnabled(False)
+            
+            # Check if buttons are currently disabled by an operation
+            if not self.buttons_disabled:
+                self.install_button.setEnabled(True)
+
 
     def _is_proton_runner(self):
         """Helper to check if the current runner is Proton"""
@@ -266,17 +294,24 @@ class AeNuxApp(QWidget):
         self._save_config()
 
     def _check_runner_support(self):
-        """Disable buttons if the selected runner is Proton."""
+        """Disable buttons if the selected runner is Proton or if they are already persistently disabled."""
         is_proton = self._is_proton_runner()
+        is_installed = os.path.exists(AE_NUX_DIR)
         
-        self.btn_run.setEnabled(not is_proton)
-        self.btn_kill.setEnabled(not is_proton)
-        
-        self.btn_install_plugin.setEnabled(os.path.exists(AE_NUX_DIR) and not is_proton)
-        
-        if is_proton:
-            self.logs_box.append("[ERROR] Proton is not supported! Please select a Wine runner.")
+        # Only set enabled state if not currently disabled by a thread operation
+        if not self.buttons_disabled:
+            self.btn_run.setEnabled(is_installed and not is_proton)
+            self.btn_kill.setEnabled(is_installed and not is_proton)
+            self.btn_install_plugin.setEnabled(is_installed and not is_proton)
+        else:
+            # If persistently disabled, ensure they stay disabled until _enable_buttons is called
+            self.btn_run.setEnabled(False)
+            self.btn_kill.setEnabled(False)
+            self.btn_install_plugin.setEnabled(False)
+            
 
+        if is_proton:
+            self.logs_box.append("[ERROR] Proton is not fully supported! Please select a Wine runner for patch/plugin functions.")
 
     def _show_install_method_dialog(self, title, message):
         """Show dialog to choose installation method (Download/Local File/Cancel)."""
@@ -332,7 +367,7 @@ class AeNuxApp(QWidget):
                     self.logs_box.append("[USER] No file selected. Installation cancelled.")
                     return
 
-            self._disable_buttons_temporarily(500)
+            self._disable_buttons_persistent()
             self.install_button.setEnabled(False)
             self.install_button.setText("Installing...")
             self.progress_bar.setVisible(True)
@@ -343,7 +378,7 @@ class AeNuxApp(QWidget):
             
             self.install_thread = InstallThread(zip_file_path)
             self.install_thread.log_signal.connect(self.logs_box.append)
-            self.install_thread.progress_signal.connect(self.progress_bar.setValue)
+            self.install_thread.progress_signal.connect(self._update_progress) # Connect to progress handler
             self.install_thread.finished_signal.connect(self._installation_finished)
             self.install_thread.cancelled.connect(self._installation_cancelled)
             self.install_thread.start()
@@ -384,7 +419,8 @@ class AeNuxApp(QWidget):
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
-            self._disable_buttons_temporarily(2000)
+            # --- Use Cooldown disable for this quick, single action ---
+            self._disable_buttons_cooldown(2000) 
             try:
                 for path, name in [(AE_NUX_DIR, "AeNux directory"), (WINE_PREFIX_DIR, "Wineprefix")]:
                     if os.path.exists(path):
@@ -422,7 +458,7 @@ class AeNuxApp(QWidget):
                                 "This will install additional plugins. Continue?",
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             
-            self._disable_buttons_temporarily(500)
+            self._disable_buttons_persistent()
             self.btn_install_plugin.setEnabled(False)
             self.btn_install_plugin.setText("Installing...")
             self.progress_bar.setVisible(True)
@@ -434,7 +470,7 @@ class AeNuxApp(QWidget):
             
             self.plugin_thread = PluginThread(runner_path, WINE_PREFIX_DIR, zip_file_path)
             self.plugin_thread.log_signal.connect(self.logs_box.append)
-            self.plugin_thread.progress_signal.connect(self.progress_bar.setValue)
+            self.plugin_thread.progress_signal.connect(self._update_progress) # Connect to progress handler
             self.plugin_thread.finished_signal.connect(self._plugin_installation_finished)
             self.plugin_thread.cancelled.connect(self._plugin_installation_cancelled)
             self.plugin_thread.start()
@@ -477,7 +513,7 @@ class AeNuxApp(QWidget):
         os.makedirs(WINE_PREFIX_DIR, exist_ok=True)
 
         if not os.path.exists(PATCHED_FILE_FLAG):
-            self._disable_buttons_temporarily(1000)
+            self._disable_buttons_persistent()
             self.logs_box.append("[INFO] Applying AeNux patch before running...")
             self.progress_bar.setVisible(True)
             self.cancel_button.setVisible(True)
@@ -485,13 +521,14 @@ class AeNuxApp(QWidget):
             
             self.patch_thread = PatchThread(runner_path, WINE_PREFIX_DIR)
             self.patch_thread.log_signal.connect(self.logs_box.append)
-            self.patch_thread.progress_signal.connect(self.progress_bar.setValue)
+            self.patch_thread.progress_signal.connect(self._update_progress) # Connect to progress handler
             self.patch_thread.finished_signal.connect(lambda success: self._patch_finished(success, runner_path, WINE_PREFIX_DIR, afterfx_path))
             self.patch_thread.cancelled.connect(self._patch_cancelled)
             self.patch_thread.start()
         else:
-            self._disable_buttons_temporarily(1000)
+            self.logs_box.append("[INFO] Running AfterFX...") 
             self._run_afterfx(runner_path, WINE_PREFIX_DIR, afterfx_path)
+            self._disable_buttons_cooldown(1000) # Short cooldown to prevent spamming the button
 
     def _patch_finished(self, success, runner_path, wineprefix_path, afterfx_path):
         """Handle patch completion and proceed to run AfterFX if successful."""
@@ -502,7 +539,8 @@ class AeNuxApp(QWidget):
         if success:
             self.logs_box.append("[INFO] Patch applied successfully, now running AfterFX...")
             self._run_afterfx(runner_path, wineprefix_path, afterfx_path)
-
+            self._disable_buttons_cooldown(1000)
+            
             self.btn_run.setText('Run AfterFX')
         else:
             self.logs_box.append("[ERROR] Patch failed. AfterFX will not be run.")
@@ -534,7 +572,7 @@ class AeNuxApp(QWidget):
         """Kill Wine and AfterFX processes."""
         if self.buttons_disabled: return
             
-        self._disable_buttons_temporarily(1000)
+        self._disable_buttons_cooldown(1000) # Use cooldown disable
         try:
             # Kill processes by name
             for proc in ["AfterFX.exe", "wine", "wineserver"]:
@@ -545,9 +583,9 @@ class AeNuxApp(QWidget):
 
     def _cancel_operation(self):
         """Cancel the currently running thread."""
-        if self.buttons_disabled: return
-            
-        self._disable_buttons_temporarily(1000)
+        if self.buttons_disabled: 
+            # If buttons are disabled by a persistent operation, allow cancel
+            pass
         
         thread_to_cancel = self.install_thread or self.patch_thread or self.plugin_thread
         thread_name = ""
@@ -561,8 +599,12 @@ class AeNuxApp(QWidget):
                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
                 thread_to_cancel.cancel()
                 self.logs_box.append(f"[USER] {thread_name.capitalize()} cancelled by user.")
+                # The thread's 'cancelled' signal handler will call _enable_buttons
                 self.cancel_button.setVisible(False)
                 self.progress_bar.setVisible(False)
+                self._disable_buttons_cooldown(1000) # Cooldown after cancel press
+            else:
+                self._disable_buttons_cooldown(500) # Cooldown if cancel press was rejected
 
     def _create_shortcut(self):
         """Create desktop shortcut and icon for the application loader."""
@@ -579,7 +621,7 @@ class AeNuxApp(QWidget):
             desktop_file = os.path.join(applications_dir, "AeNux.desktop")
             run_script = os.path.join(current_dir, "app.py")
             
-            venv_python = os.path.join(current_dir, "venv", "bin", "python")
+            venv_python = os.path.join(current_dir, ".venv", "bin", "python")
             python_exec = venv_python if os.path.exists(venv_python) else "python3"
             if python_exec == "python3": self.logs_box.append("[INFO] Using system python instead of venv")
             
@@ -626,7 +668,7 @@ Categories=AudioVideo;Video;
         """Refresh the list of available runners."""
         if self.buttons_disabled: return
             
-        self._disable_buttons_temporarily(1000)
+        self._disable_buttons_cooldown(1000) # Use cooldown disable
         self.logs_box.append("[INFO] Refreshing runner list...")
         self._populate_runner_dropdown()
         self._check_runner_support()
@@ -635,7 +677,7 @@ Categories=AudioVideo;Video;
         """Open the specified folder in the default file manager."""
         if self.buttons_disabled: return
             
-        self._disable_buttons_temporarily(1000)
+        self._disable_buttons_cooldown(1000) # Use cooldown disable
         
         path_map = {
             "wine prefix": WINE_PREFIX_DIR,
@@ -650,7 +692,7 @@ Categories=AudioVideo;Video;
             self.logs_box.append(f"[ERROR] Unknown folder type: {name}")
             return
 
-        if name in ["plugin", "preset"] and not os.path.exists(AE_NUX_DIR):
+        if name in ["plugins", "presets"] and not os.path.exists(AE_NUX_DIR):
             QMessageBox.warning(self, "Not Installed", "You need to install AeNux first to open this folder.")
             return
 
@@ -669,16 +711,25 @@ Categories=AudioVideo;Video;
         Overrides the close event handler to ask for confirmation before closing.
         Checks for running threads and warns the user if an operation is active.
         """
-        if self.install_thread and self.install_thread.isRunning():
+        # Check for any running thread
+        if (self.install_thread and self.install_thread.isRunning()) or \
+           (self.patch_thread and self.patch_thread.isRunning()) or \
+           (self.plugin_thread and self.plugin_thread.isRunning()):
+            
             reply = QMessageBox.question(
                 self, 'Operation in Progress',
-                "Installation is currently running. Are you sure you want to exit? Cancelling may lead to an unstable state.",
+                "An operation is currently running. Are you sure you want to exit? Cancelling may lead to an unstable state.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
             
             if reply == QMessageBox.StandardButton.Yes:
-                self.install_thread.cancel()
+                if self.install_thread and self.install_thread.isRunning():
+                    self.install_thread.cancel()
+                if self.patch_thread and self.patch_thread.isRunning():
+                    self.patch_thread.cancel()
+                if self.plugin_thread and self.plugin_thread.isRunning():
+                    self.plugin_thread.cancel()
                 event.accept()
             else:
                 event.ignore()
@@ -692,11 +743,6 @@ Categories=AudioVideo;Video;
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            if self.patch_thread and self.patch_thread.isRunning():
-                self.patch_thread.cancel()
-            if self.plugin_thread and self.plugin_thread.isRunning():
-                self.plugin_thread.cancel()
-                
             event.accept()
         else:
             event.ignore()

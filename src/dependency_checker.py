@@ -8,8 +8,7 @@ REQUIRED_DEPENDENCIES = [
     "zenity",
     "xdg-open",
     "pkill",
-    "update-desktop-database",
-    "uv"
+    "update-desktop-database"
 ]
 
 def check_dependencies():
