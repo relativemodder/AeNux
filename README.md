@@ -66,7 +66,6 @@
 
 2. **GUI Installation**
    - Click the **"Install"** button in the top-right corner
-   - Enable the **"Apply AeNux Patch"** checkbox
    - Click **"Run AeNux"** to launch AeNux
 
 ### Plugin Installation
