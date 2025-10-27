@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 uv sync
 uv run python src/main.py

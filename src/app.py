@@ -6,14 +6,15 @@ import json
 import shutil
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QTextEdit, QCheckBox, QMessageBox, QProgressBar, QFileDialog
+    QComboBox, QTextEdit, QCheckBox, QMessageBox, QProgressBar, QFileDialog,
+    QSpacerItem, QSizePolicy
 )
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QTimer
 
 from config import (
     CONFIG_PATH, AE_NUX_DIR, WINE_PREFIX_DIR, PLUGIN_DIR, PRESET_DIR, 
-    ICON_PATH, RUNNER_BASE_DIR
+    ICON_PATH, RUNNER_BASE_DIR, PATCHED_FILE_FLAG
 )
 from threads import InstallThread, PatchThread, PluginThread
 
@@ -21,22 +22,19 @@ from threads import InstallThread, PatchThread, PluginThread
 class AeNuxApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AeNux Halloween Edition")
+        self.setWindowTitle("AeNux")
         self.resize(520, 350)
         self.config = self._load_config()
         
-        # Thread references
         self.install_thread = None
         self.patch_thread = None
         self.plugin_thread = None
         
-        # UI state variables
         self.buttons_disabled = False
         self.button_cooldown_timer = QTimer()
         self.button_cooldown_timer.setSingleShot(True)
         self.button_cooldown_timer.timeout.connect(self._enable_buttons)
         
-        # Save reference to main buttons for easy state management
         self.main_buttons = []
 
         if os.path.exists(ICON_PATH):
@@ -56,7 +54,6 @@ class AeNuxApp(QWidget):
         """Sets up the layout and widgets."""
         root = QVBoxLayout(self)
         
-        # --- Status Row ---
         status_row = QHBoxLayout()
         status_row.addWidget(QLabel("Status:"))
         self.status_label = QLabel("Checking...")
@@ -66,6 +63,9 @@ class AeNuxApp(QWidget):
         self.install_button.clicked.connect(self._install_aenux)
         status_row.addWidget(self.install_button)
         self.main_buttons.append(self.install_button)
+
+        self.install_button.setObjectName('install_button')
+        self.install_button.setStyleSheet('#install_button { font-weight: bold; }')
         
         self.uninstall_button = QPushButton("Uninstall")
         self.uninstall_button.clicked.connect(self._uninstall_aenux)
@@ -74,14 +74,13 @@ class AeNuxApp(QWidget):
         self.main_buttons.append(self.uninstall_button)
         root.addLayout(status_row)
 
-        # --- Logs ---
         root.addWidget(QLabel("Logs:"))
         self.logs_box = QTextEdit()
         self.logs_box.setReadOnly(True)
+        self.setStyleSheet("QTextEdit{padding: 10px;}")
         self.logs_box.setFixedHeight(140)
         root.addWidget(self.logs_box)
 
-        # --- Progress Bar with Cancel button ---
         progress_layout = QHBoxLayout()
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -98,7 +97,6 @@ class AeNuxApp(QWidget):
         
         root.addLayout(progress_layout)
 
-        # --- Runner row ---
         runner_row = QHBoxLayout()
         runner_row.addWidget(QLabel("Runner:"))
         self.runner_dropdown = QComboBox()
@@ -111,20 +109,14 @@ class AeNuxApp(QWidget):
         
         root.addLayout(runner_row)
 
-        # --- Checkboxes and Plugin button ---
-        cb_row = QHBoxLayout()
-        
-        self.btn_install_plugin = QPushButton("Install Plugin")
-        self.btn_install_plugin.clicked.connect(self._install_plugin)
-        self.btn_install_plugin.setEnabled(False)
-        cb_row.addWidget(self.btn_install_plugin)
-        self.main_buttons.append(self.btn_install_plugin)
-        
-        root.addLayout(cb_row)
+        spacer_row = QSpacerItem(1, 30, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        root.addItem(spacer_row)
 
-        # --- Execution buttons ---
         exec_row = QHBoxLayout()
-        self.btn_run = QPushButton("Run AfterFX")
+        self.btn_run = QPushButton("Patch first and run AfterFX")
+        self.btn_run.setObjectName('btn_run')
+        self.btn_run.setStyleSheet('#btn_run { font-weight: bold; }')
+
         self.btn_kill = QPushButton("Kill AfterFX")
         self.btn_run.clicked.connect(self._run_aenux)
         self.btn_kill.clicked.connect(self._kill_aenux)
@@ -133,23 +125,40 @@ class AeNuxApp(QWidget):
         self.main_buttons.extend([self.btn_run, self.btn_kill])
         root.addLayout(exec_row)
 
-        # --- Folders ---
+        cb_row = QHBoxLayout()
+        
+        self.btn_install_plugin = QPushButton("Install some plugins")
+        self.btn_install_plugin.clicked.connect(self._install_plugin)
+        self.btn_install_plugin.setEnabled(False)
+        cb_row.addWidget(self.btn_install_plugin)
+        self.main_buttons.append(self.btn_install_plugin)
+        
+        root.addLayout(cb_row)
+
+        spacer_row = QSpacerItem(1, 30, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        root.addItem(spacer_row)
+
+        fm_label = QLabel('AE Folder management')
+        fm_label.setObjectName('fm_management_label')
+        fm_label.setStyleSheet('#fm_management_label { margin-top: 10px; }')
+        fm_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        root.addWidget(fm_label)
+
         folder_row = QHBoxLayout()
         self.folder_buttons = []
-        for name in ["Runner", "Plugin", "Preset", "Wineprefix"]:
-            btn = QPushButton(f"{name} Folder")
+        for name in ["Runners", "Plugins", "Presets", "Wine Prefix"]:
+            btn = QPushButton(f"{name}")
             btn.clicked.connect(lambda checked, n=name.lower(): self._open_folder(n))
             folder_row.addWidget(btn)
             self.folder_buttons.append(btn)
         self.main_buttons.extend(self.folder_buttons)
         root.addLayout(folder_row)
 
-        # --- Footer ---
         footer = QLabel('Made with 🎃 by cutefishaep')
+        footer.setObjectName('footer')
+        footer.setStyleSheet('#footer { margin-top: 30px; }')
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(footer)
-
-    # --- UI State Management Methods ---
 
     def _disable_buttons_temporarily(self, duration=1500):
         """Temporarily disable all main buttons"""
@@ -160,7 +169,6 @@ class AeNuxApp(QWidget):
         for button in self.main_buttons:
             button.setEnabled(False)
         
-        # Also disable dropdown and checkbox
         self.runner_dropdown.setEnabled(False)
         
         self.button_cooldown_timer.start(duration)
@@ -171,7 +179,6 @@ class AeNuxApp(QWidget):
         for button in self.main_buttons:
             button.setEnabled(True)
         
-        # Re-enable dropdown and update states based on current context
         self.runner_dropdown.setEnabled(True)
         self._check_runner_support()
         self._check_installation_status()
@@ -181,7 +188,6 @@ class AeNuxApp(QWidget):
         is_installed = False
         if os.path.exists(AE_NUX_DIR):
             try:
-                # Check for non-hidden files to confirm a proper install
                 contents = [f for f in os.listdir(AE_NUX_DIR) if not f.startswith('.')]
                 if contents:
                     is_installed = True
@@ -189,14 +195,16 @@ class AeNuxApp(QWidget):
                 pass
         
         if is_installed:
-            self.status_label.setText("AeNux **installed**")
+            self.status_label.setText("AeNux installed")
             self.install_button.hide()
             self.uninstall_button.show()
-            # Only enable plugin button if the runner is supported
             self.btn_install_plugin.setEnabled(not self._is_proton_runner())
             self.logs_box.append("[STATUS] AeNux is installed and ready to use.")
+
+            if os.path.exists(PATCHED_FILE_FLAG):
+                self.btn_run.setText('Run AfterFX')
         else:
-            self.status_label.setText("AeNux is **not installed**")
+            self.status_label.setText("AeNux is not installed")
             self.install_button.show()
             self.uninstall_button.hide()
             self.btn_install_plugin.setEnabled(False)
@@ -301,8 +309,6 @@ class AeNuxApp(QWidget):
         )
         return file_path
 
-    # --- Operation Execution Methods ---
-
     def _install_aenux(self):
         """Initiate the AeNux installation process."""
         if self.buttons_disabled: return
@@ -310,7 +316,7 @@ class AeNuxApp(QWidget):
             self.logs_box.append("[INFO] Installation already in progress...")
             return
 
-        if QMessageBox.question(self, "Confirm Installation", f"This will install AeNux to **{AE_NUX_DIR}**. Continue?",
+        if QMessageBox.question(self, "Confirm Installation", f"This will install AeNux to {AE_NUX_DIR}. Continue?",
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             
             method = self._show_install_method_dialog("Installation Method", "How would you like to install AeNux?")
@@ -350,7 +356,13 @@ class AeNuxApp(QWidget):
         self.cancel_button.setVisible(False)
         
         if success:
-            self._create_shortcut()
+            reply = QMessageBox.question(self, "Create Shortcut",
+                                     "Do you want to create AeNux shortcut?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self._create_shortcut()
+
             self._check_installation_status() # Update status and plugin button
         else:
             self.logs_box.append("[ERROR] Installation failed. Please check the logs above.")
@@ -368,7 +380,7 @@ class AeNuxApp(QWidget):
         if self.buttons_disabled: return
             
         reply = QMessageBox.question(self, "Confirm Uninstall",
-                                     "This will remove **AeNux, Wineprefix, and shortcuts**. Continue?",
+                                     "This will remove AeNux, Wineprefix, and shortcuts. Continue?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -379,9 +391,11 @@ class AeNuxApp(QWidget):
                         shutil.rmtree(path)
                         self.logs_box.append(f"[UNINSTALL] {name} removed.")
                 
+                os.system(f"rm -rf ~/cutefishaep")
                 self._remove_shortcut()
                 self.logs_box.clear()
                 self._check_installation_status()
+                
                 self.logs_box.append("[UNINSTALL] AeNux has been completely uninstalled.")
                 
             except Exception as e:
@@ -462,18 +476,22 @@ class AeNuxApp(QWidget):
         
         os.makedirs(WINE_PREFIX_DIR, exist_ok=True)
 
-        self._disable_buttons_temporarily(1000)
-        self.logs_box.append("[INFO] Applying AeNux patch before running...")
-        self.progress_bar.setVisible(True)
-        self.cancel_button.setVisible(True)
-        self.progress_bar.setValue(0)
-        
-        self.patch_thread = PatchThread(runner_path, WINE_PREFIX_DIR)
-        self.patch_thread.log_signal.connect(self.logs_box.append)
-        self.patch_thread.progress_signal.connect(self.progress_bar.setValue)
-        self.patch_thread.finished_signal.connect(lambda success: self._patch_finished(success, runner_path, WINE_PREFIX_DIR, afterfx_path))
-        self.patch_thread.cancelled.connect(self._patch_cancelled)
-        self.patch_thread.start()
+        if not os.path.exists(PATCHED_FILE_FLAG):
+            self._disable_buttons_temporarily(1000)
+            self.logs_box.append("[INFO] Applying AeNux patch before running...")
+            self.progress_bar.setVisible(True)
+            self.cancel_button.setVisible(True)
+            self.progress_bar.setValue(0)
+            
+            self.patch_thread = PatchThread(runner_path, WINE_PREFIX_DIR)
+            self.patch_thread.log_signal.connect(self.logs_box.append)
+            self.patch_thread.progress_signal.connect(self.progress_bar.setValue)
+            self.patch_thread.finished_signal.connect(lambda success: self._patch_finished(success, runner_path, WINE_PREFIX_DIR, afterfx_path))
+            self.patch_thread.cancelled.connect(self._patch_cancelled)
+            self.patch_thread.start()
+        else:
+            self._disable_buttons_temporarily(1000)
+            self._run_afterfx(runner_path, WINE_PREFIX_DIR, afterfx_path)
 
     def _patch_finished(self, success, runner_path, wineprefix_path, afterfx_path):
         """Handle patch completion and proceed to run AfterFX if successful."""
@@ -484,6 +502,8 @@ class AeNuxApp(QWidget):
         if success:
             self.logs_box.append("[INFO] Patch applied successfully, now running AfterFX...")
             self._run_afterfx(runner_path, wineprefix_path, afterfx_path)
+
+            self.btn_run.setText('Run AfterFX')
         else:
             self.logs_box.append("[ERROR] Patch failed. AfterFX will not be run.")
 
@@ -503,14 +523,13 @@ class AeNuxApp(QWidget):
             
             self.logs_box.append(f"[RUN] Starting AfterFX.exe with {os.path.basename(runner_path)}...")
             
-            # Start the process without waiting
             subprocess.Popen([wine_path, afterfx_path], env=env)
             self.logs_box.append("[RUN] AfterFX started with Wine.")
                 
         except Exception as e:
             self.logs_box.append(f"[ERROR] Failed to run AfterFX: {str(e)}")
             QMessageBox.critical(self, "Execution Error", f"Failed to run AfterFX: {str(e)}")
-
+    
     def _kill_aenux(self):
         """Kill Wine and AfterFX processes."""
         if self.buttons_disabled: return
@@ -619,10 +638,10 @@ Categories=AudioVideo;Video;
         self._disable_buttons_temporarily(1000)
         
         path_map = {
-            "wineprefix": WINE_PREFIX_DIR,
-            "runner": RUNNER_BASE_DIR,
-            "plugin": PLUGIN_DIR,
-            "preset": PRESET_DIR,
+            "wine prefix": WINE_PREFIX_DIR,
+            "runners": RUNNER_BASE_DIR,
+            "plugins": PLUGIN_DIR,
+            "presets": PRESET_DIR,
         }
         
         path = path_map.get(name)
@@ -644,3 +663,40 @@ Categories=AudioVideo;Video;
             QMessageBox.critical(self, "Error", f"Could not open folder: {path}")
 
         self.logs_box.append(f"[OPEN] {name} folder opened.")
+    
+    def closeEvent(self, event):
+        """
+        Overrides the close event handler to ask for confirmation before closing.
+        Checks for running threads and warns the user if an operation is active.
+        """
+        if self.install_thread and self.install_thread.isRunning():
+            reply = QMessageBox.question(
+                self, 'Operation in Progress',
+                "Installation is currently running. Are you sure you want to exit? Cancelling may lead to an unstable state.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.install_thread.cancel()
+                event.accept()
+            else:
+                event.ignore()
+                return
+
+        reply = QMessageBox.question(
+            self, 'Confirm Exit',
+            "Are you sure you want to quit AeNux?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.patch_thread and self.patch_thread.isRunning():
+                self.patch_thread.cancel()
+            if self.plugin_thread and self.plugin_thread.isRunning():
+                self.plugin_thread.cancel()
+                
+            event.accept()
+        else:
+            event.ignore()

@@ -17,7 +17,8 @@ if __name__ == "__main__":
         QMessageBox().critical(
             None, 
             "Missing dependencies!", 
-            f"Install these: {', '.join(missing_deps)}.\n\n Use your distro's package manager."
+            f"Install these: {', '.join(missing_deps)}.\n\n"
+            "Use your distro's package manager."
         )
         exit(-1)
     

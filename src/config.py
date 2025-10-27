@@ -2,16 +2,19 @@
 
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(BASE_DIR, "../config.json")
+BASE_DIR = os.path.abspath('.')
+print("BASE_DIR is", BASE_DIR)
+
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 AE_NUX_DIR = os.path.expanduser('~/cutefishaep/AeNux')
+PATCHED_FILE_FLAG = os.path.expanduser('~/cutefishaep/AeNux/patched')
 PLUGIN_DIR = os.path.join(AE_NUX_DIR, "Plug-ins")
 PRESET_DIR = os.path.expanduser('~/Documents/Adobe/After Effects 2024/User Presets')
 
-WINE_PREFIX_DIR = os.path.join(BASE_DIR, "../aenux", "wineprefix")
-WINETRICKS_PATH = os.path.join(BASE_DIR, "../winetricks")
+WINE_PREFIX_DIR = os.path.join(BASE_DIR, "aenux", "wineprefix")
+WINETRICKS_PATH = os.path.join(BASE_DIR, "winetricks")
 
-ICON_PATH = os.path.join(BASE_DIR, "../asset/logo.png")
+ICON_PATH = os.path.join(BASE_DIR, "asset/logo.png")
 
 AE_NUX_DOWNLOAD_URL = 'https://huggingface.co/cutefishae/AeNux-model/resolve/main/2024.zip'
 PLUGIN_DOWNLOAD_URL = 'https://huggingface.co/cutefishae/AeNux-model/resolve/main/aenux-require-plugin.zip'
@@ -20,7 +23,7 @@ AE_NUX_ZIP_TEMP_NAME = '2024.zip'
 AE_NUX_EXTRACT_DIR = 'Ae2024'
 PLUGIN_ZIP_TEMP_NAME = 'aenux-require-plugin.zip'
 
-RUNNER_BASE_DIR = os.path.join(BASE_DIR, "../runner")
+RUNNER_BASE_DIR = os.path.join(BASE_DIR, "runner")
 
 AENUX_COLORS_REG_CONTENT = """Windows Registry Editor Version 5.00
 
