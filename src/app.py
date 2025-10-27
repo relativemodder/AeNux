@@ -619,12 +619,15 @@ class AeNuxApp(QWidget):
             applications_dir = os.path.expanduser("~/.local/share/applications")
             os.makedirs(applications_dir, exist_ok=True)
             desktop_file = os.path.join(applications_dir, "AeNux.desktop")
-            run_script = os.path.join(current_dir, "app.py")
             
             venv_python = os.path.join(current_dir, ".venv", "bin", "python")
             python_exec = venv_python if os.path.exists(venv_python) else "python3"
-            if python_exec == "python3": self.logs_box.append("[INFO] Using system python instead of venv")
-            
+
+            if python_exec == "python3":
+                run_script = os.path.join(current_dir, "run_native.sh")
+            else:
+                run_script = os.path.join(current_dir, "run.sh")
+
             desktop_content = f"""[Desktop Entry]
 Name=AeNux Loader
 Comment=Run AeNux using Wine
