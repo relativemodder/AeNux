@@ -631,7 +631,7 @@ class AeNuxApp(QWidget):
             desktop_content = f"""[Desktop Entry]
 Name=AeNux Loader
 Comment=Run AeNux using Wine
-Exec={python_exec} {run_script}
+Exec={run_script}
 Path={current_dir}
 Type=Application
 Icon=AeNux
