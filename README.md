@@ -22,10 +22,10 @@
 
 ## ⚠️ Known Limitations
 
-- ❌ **Hardware Acceleration** - OpenCL support limited (NVIDIA GPUs excepted)
-- 🎨 **UI Rendering** - Occasional flickering with certain plugins (e.g., Flow)
-- 💥 **Memory Management** - Potential crashes under heavy RAM usage (Debian excluded)
-- 🐛 **Bug Reports** - Please submit issues for any discovered anomalies
+- **Hardware Acceleration** - OpenCL support limited (NVIDIA GPUs ONLY)
+- **UI Rendering** - Occasional flickering with certain plugins (e.g., Flow)
+- **Memory Management** - Potential crashes under heavy RAM usage (Debian excluded)
+- **Bug Reports** - Please submit issues for any discovered anomalies
 
 ---
 
@@ -37,6 +37,11 @@
 | **Processor** | 11th Gen Intel® Core™ i3-1115G4 @ 3.00GHz × 2 |
 | **Graphics** | Intel Corporation Tiger Lake-LP GT2 [UHD Graphics G4] |
 | **Memory** | 8 GB RAM |
+|-----------|---------------|
+| **Operating Systems** | Arch Linux |
+| **Processor** | Intel(R) Core(TM) i5-8400 (6) @ 4.00 GHz |
+| **Graphics** | NVIDIA GeForce GTX 1660 Ti [Discrete]|
+| **Memory** | 16 GB RAM |
 
 ---
 
@@ -114,7 +119,7 @@ https://forum.mattkc.com/viewtopic.php?t=337
 
 ## 🎯 Development Roadmap
 
-- [❓] Enable hardware acceleration support
+- [✅] Enable hardware acceleration support
 *Only for NVIDIA, by patching nvidia-libs. [Read this issue for more information](https://github.com/cutefishaep/AeNux/issues/5).*
 - [❌] Streamline additional plugin installation
 - [❌] Package as .deb file for easier distribution
