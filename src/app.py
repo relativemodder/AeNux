@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QTimer
 
 from config import (
     CONFIG_PATH, AE_NUX_DIR, WINE_PREFIX_DIR, PLUGIN_DIR, PRESET_DIR, 
-    ICON_PATH, RUNNER_BASE_DIR, PATCHED_FILE_FLAG
+    ICON_PATH, RUNNER_BASE_DIR, PATCHED_FILE_FLAG, BASE_DIR
 )
 from threads import InstallThread, PatchThread, PluginThread
 
@@ -182,11 +182,13 @@ class AeNuxApp(QWidget):
     def _enable_buttons(self):
         """Re-enable all buttons and reset the disabled flag."""
         if not self.buttons_disabled:
-            return 
-            
+            return
+
         self.buttons_disabled = False
-        self._check_installation_status() 
+        self._check_installation_status()
         self._check_runner_support()
+        for button in self.main_buttons:
+            button.setEnabled(True)
         self.runner_dropdown.setEnabled(True)
 
     def _update_progress(self, value):
@@ -215,11 +217,14 @@ class AeNuxApp(QWidget):
             self.install_button.hide()
             self.uninstall_button.show()
             self.btn_install_plugin.setEnabled(not self._is_proton_runner() and not self.buttons_disabled)
-            
+
             # Check if buttons are currently disabled by an operation
             if not self.buttons_disabled:
                 self.uninstall_button.setEnabled(True)
-                
+
+            for btn in self.folder_buttons:
+                btn.setEnabled(True)
+
             self.logs_box.append("[STATUS] AeNux is installed and ready to use.")
 
             if os.path.exists(PATCHED_FILE_FLAG):
@@ -231,10 +236,13 @@ class AeNuxApp(QWidget):
             self.install_button.show()
             self.uninstall_button.hide()
             self.btn_install_plugin.setEnabled(False)
-            
+
             # Check if buttons are currently disabled by an operation
             if not self.buttons_disabled:
                 self.install_button.setEnabled(True)
+
+            for btn in self.folder_buttons:
+                btn.setEnabled(False)
 
 
     def _is_proton_runner(self):
@@ -297,18 +305,22 @@ class AeNuxApp(QWidget):
         """Disable buttons if the selected runner is Proton or if they are already persistently disabled."""
         is_proton = self._is_proton_runner()
         is_installed = os.path.exists(AE_NUX_DIR)
-        
+
         # Only set enabled state if not currently disabled by a thread operation
         if not self.buttons_disabled:
             self.btn_run.setEnabled(is_installed and not is_proton)
             self.btn_kill.setEnabled(is_installed and not is_proton)
             self.btn_install_plugin.setEnabled(is_installed and not is_proton)
+            for btn in self.folder_buttons:
+                btn.setEnabled(is_installed)
         else:
             # If persistently disabled, ensure they stay disabled until _enable_buttons is called
             self.btn_run.setEnabled(False)
             self.btn_kill.setEnabled(False)
             self.btn_install_plugin.setEnabled(False)
-            
+            for btn in self.folder_buttons:
+                btn.setEnabled(False)
+
 
         if is_proton:
             self.logs_box.append("[ERROR] Proton is not fully supported! Please select a Wine runner for patch/plugin functions.")
@@ -609,7 +621,7 @@ class AeNuxApp(QWidget):
     def _create_shortcut(self):
         """Create desktop shortcut and icon for the application loader."""
         try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
+            current_dir = BASE_DIR
             
             icons_dir = os.path.expanduser("~/.local/share/icons")
             os.makedirs(icons_dir, exist_ok=True)
